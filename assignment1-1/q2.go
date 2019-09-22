@@ -2,7 +2,9 @@ package cos418_hw1_1
 
 import (
 	"bufio"
+	"fmt"
 	"io"
+	"os"
 	"strconv"
 )
 
@@ -12,6 +14,13 @@ import (
 func sumWorker(nums chan int, out chan int) {
 	// TODO: implement me
 	// HINT: use for loop over `nums`
+	var sum int
+	for x := range nums {
+		sum += x
+	}
+	// fmt.Printf("goroutine computed partial sum %d\n", sum)
+
+	out <- sum
 }
 
 // Read integers from the file `fileName` and return sum of all values.
@@ -23,7 +32,40 @@ func sum(num int, fileName string) int {
 	// TODO: implement me
 	// HINT: use `readInts` and `sumWorkers`
 	// HINT: used buffered channels for splitting numbers between workers
-	return 0
+	file, err := os.Open(fileName)
+	if err != nil {
+		panic(fmt.Sprintf("Encountered error while opening the file %s: %v", fileName, err))
+	}
+	numbers, err := readInts(bufio.NewReader(file))
+	if err != nil {
+		panic(fmt.Sprintf("Encountered error while reading the file %s: %v", fileName, err))
+	}
+	file.Close()
+
+	channels := make([]chan int, num)
+	out := make(chan int)
+	size := len(numbers)/num + 1
+	// fmt.Printf("Creating %d buffered channels of size %d\n", num, size)
+	for i := 0; i < num; i++ {
+		channels[i] = make(chan int, size)
+		go sumWorker(channels[i], out)
+	}
+	for i, n := range numbers {
+		channels[i%num] <- n
+	}
+	for i := 0; i < num; i++ {
+		close(channels[i])
+	}
+
+	sum := 0
+	for i := 0; i < num; i++ {
+		val := <-out
+		sum += val
+		// fmt.Printf("Received %d from channel. Current Sum = %d\n", val, sum)
+	}
+	close(out)
+
+	return sum
 }
 
 // Read a list of integers separated by whitespace from `r`.
